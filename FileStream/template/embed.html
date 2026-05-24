@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ file_name }}</title>
+    <meta name="robots" content="noindex, nofollow">
+
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    <script src="https://unpkg.com/videojs-contrib-quality-levels@4.0.0/dist/videojs-contrib-quality-levels.min.js"></script>
+
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        html, body { width:100%; height:100%; background:#000; overflow:hidden; }
+
+        .video-js { width:100vw!important; height:100vh!important; }
+
+        /* Accent */
+        .vjs-play-progress, .vjs-volume-level { background:#DC1637!important; }
+        .vjs-play-progress::before { color:#DC1637!important; }
+        .vjs-load-progress div { background:rgba(220,22,55,.25)!important; }
+
+        /* Big play */
+        .vjs-big-play-button {
+            top:50%!important; left:50%!important;
+            transform:translate(-50%,-50%)!important;
+            border-radius:50%!important; width:64px!important; height:64px!important; line-height:64px!important;
+            background:rgba(220,22,55,.88)!important; border:none!important;
+            box-shadow:0 0 28px rgba(220,22,55,.4)!important;
+            transition:transform .15s,background .15s!important;
+        }
+        .vjs-big-play-button:hover { background:#DC1637!important; transform:translate(-50%,-50%) scale(1.1)!important; }
+        .vjs-big-play-button .vjs-icon-placeholder::before { font-size:28px!important; line-height:64px!important; }
+
+        /* Control bar */
+        .vjs-control-bar {
+            background:linear-gradient(transparent,rgba(0,0,0,.9))!important;
+            height:48px!important; padding:0 8px!important;
+        }
+        .vjs-button>.vjs-icon-placeholder::before { line-height:48px!important; font-size:18px!important; }
+
+        /* Seek bar */
+        .vjs-progress-control {
+            position:absolute!important; top:-12px!important;
+            left:0; right:0; width:100%!important; height:4px!important;
+            transition:height .15s,top .15s!important;
+        }
+        .vjs-progress-control:hover { height:8px!important; top:-16px!important; }
+        .vjs-slider { border-radius:4px!important; background:rgba(255,255,255,.2)!important; }
+
+        /* Audio / subtitle menus */
+        .vjs-menu-button-popup .vjs-menu {
+            background:#1a1a20!important;
+            border:1px solid rgba(255,255,255,.08)!important;
+            border-radius:8px!important;
+        }
+        .vjs-menu li { color:#e8e8ec!important; font-size:13px!important; }
+        .vjs-menu li:hover, .vjs-menu li.vjs-selected { background:#DC1637!important; color:#fff!important; border-radius:4px!important; }
+
+        /* Subtitle cues */
+        .vjs-text-track-display { bottom:52px!important; }
+        .vjs-text-track-cue > * {
+            background:rgba(0,0,0,.8)!important; color:#fff!important;
+            border-radius:4px!important; padding:2px 8px!important; font-size:1.1em!important;
+        }
+
+        /* Title overlay */
+        .title-overlay {
+            position:fixed; top:0; left:0; right:0;
+            padding:14px 16px;
+            background:linear-gradient(rgba(0,0,0,.75),transparent);
+            font-family:sans-serif; font-size:13px; font-weight:600;
+            color:rgba(255,255,255,.85);
+            pointer-events:none;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+            opacity:0; transition:opacity .3s; z-index:10;
+        }
+
+        /* Show title when player controls are active */
+        body.user-active .title-overlay { opacity:1; }
+    </style>
+</head>
+<body>
+
+<div class="title-overlay">{{ file_name }}</div>
+
+<video id="embedPlayer"
+    class="video-js vjs-default-skin vjs-big-play-centered"
+    controls preload="metadata" playsinline>
+</video>
+
+<script>
+const FILE_URL = "{{ file_url }}";
+const HLS_URL  = "{{ hls_url }}";
+
+const player = videojs('embedPlayer', {
+    fluid: false,
+    fill: true,
+    responsive: false,
+    playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
+    html5: {
+        vhs: {
+            overrideNative: !videojs.browser.IS_SAFARI,
+            enableLowInitialPlaylist: false,
+            smoothQualityChange: true,
+        },
+        nativeAudioTracks: false,
+        nativeVideoTracks: false,
+        nativeTextTracks: false,
+    },
+    controlBar: {
+        children: [
+            'playToggle',
+            'volumePanel',
+            'currentTimeDisplay',
+            'timeDivider',
+            'durationDisplay',
+            'progressControl',
+            'playbackRateMenuButton',
+            'audioTrackButton',   // multi-audio
+            'subsCapsButton',     // subtitles/CC
+            'qualitySelector',    // quality levels (VHS)
+            'fullscreenToggle',
+        ]
+    },
+    userActions: { hotkeys: true }
+});
+
+player.ready(function () {
+    if (HLS_URL && HLS_URL.trim() !== "") {
+        player.src({ src: HLS_URL, type: 'application/x-mpegURL' });
+    } else {
+        player.src({ src: FILE_URL, type: 'video/mp4' });
+    }
+});
+
+// Show title overlay when controls visible
+player.on('useractive',   () => document.body.classList.add('user-active'));
+player.on('userinactive', () => document.body.classList.remove('user-active'));
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function (e) {
+    switch (e.key) {
+        case ' ': case 'k':
+            e.preventDefault();
+            player.paused() ? player.play() : player.pause();
+            break;
+        case 'ArrowRight':
+            e.preventDefault();
+            player.currentTime(Math.min(player.currentTime() + 10, player.duration()));
+            break;
+        case 'ArrowLeft':
+            e.preventDefault();
+            player.currentTime(Math.max(player.currentTime() - 10, 0));
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            player.volume(Math.min(player.volume() + 0.1, 1));
+            break;
+        case 'ArrowDown':
+            e.preventDefault();
+            player.volume(Math.max(player.volume() - 0.1, 0));
+            break;
+        case 'f': case 'F':
+            player.isFullscreen() ? player.exitFullscreen() : player.requestFullscreen();
+            break;
+        case 'm': case 'M':
+            player.muted(!player.muted());
+            break;
+        case 'c': case 'C':
+            cycleTextTrack();
+            break;
+        case 'a': case 'A':
+            cycleAudioTrack();
+            break;
+    }
+});
+
+function cycleTextTrack() {
+    const tracks = player.textTracks();
+    const subs = [];
+    for (let i = 0; i < tracks.length; i++) {
+        if (['subtitles','captions'].includes(tracks[i].kind)) subs.push(i);
+    }
+    if (!subs.length) return;
+    const cur  = subs.findIndex(i => tracks[i].mode === 'showing');
+    const next = cur >= subs.length - 1 ? -1 : subs[(cur + 1)];
+    for (let i = 0; i < tracks.length; i++) {
+        if (['subtitles','captions'].includes(tracks[i].kind))
+            tracks[i].mode = (i === next) ? 'showing' : 'hidden';
+    }
+}
+
+function cycleAudioTrack() {
+    const tracks = player.audioTracks();
+    if (tracks.length <= 1) return;
+    const cur  = Array.from({ length: tracks.length }, (_, i) => i).find(i => tracks[i].enabled) ?? 0;
+    const next = (cur + 1) % tracks.length;
+    for (let i = 0; i < tracks.length; i++) tracks[i].enabled = (i === next);
+}
+</script>
+</body>
+</html>

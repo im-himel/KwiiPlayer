@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ file_name }} | FileStream</title>
+    <meta name="robots" content="noindex, nofollow">
+
+    <!-- Video.js core -->
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+
+    <!-- VHS (HLS/DASH streaming — included in vjs 8, but explicit for clarity) -->
+    <!-- quality-levels plugin -->
+    <script src="https://unpkg.com/videojs-contrib-quality-levels@4.0.0/dist/videojs-contrib-quality-levels.min.js"></script>
+    <!-- HLS.js for non-Safari browsers -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg:       #0a0a0c;
+            --surface:  #111115;
+            --surface2: #1a1a20;
+            --border:   rgba(255,255,255,0.08);
+            --accent:   #DC1637;
+            --glow:     rgba(220,22,55,0.25);
+            --text:     #e8e8ec;
+            --muted:    #888;
+            --radius:   12px;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── HEADER ── */
+        header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 24px; height: 56px;
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            position: sticky; top: 0; z-index: 100;
+        }
+        .logo { display:flex; align-items:center; gap:10px; font-weight:700; font-size:16px; color:var(--text); text-decoration:none; }
+        .logo-dot { width:10px; height:10px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--glow); }
+
+        /* ── MAIN ── */
+        main { flex:1; max-width:1100px; width:100%; margin:0 auto; padding:28px 16px 60px; }
+
+        /* ── PLAYER CARD ── */
+        .player-card {
+            background: var(--surface); border-radius: var(--radius);
+            border: 1px solid var(--border); overflow: hidden;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+        }
+        .video-container { position:relative; width:100%; background:#000; }
+
+        /* ── VIDEO.JS OVERRIDES ── */
+        .video-js {
+            width: 100% !important; height: auto !important;
+            aspect-ratio: 16/9;
+        }
+        /* Big play button */
+        .vjs-big-play-button {
+            top:50%!important; left:50%!important;
+            transform:translate(-50%,-50%)!important;
+            border-radius:50%!important;
+            width:64px!important; height:64px!important; line-height:64px!important;
+            background:rgba(220,22,55,.88)!important; border:none!important;
+            box-shadow:0 0 24px var(--glow)!important;
+            transition:transform .15s,background .15s!important;
+        }
+        .vjs-big-play-button:hover { background:var(--accent)!important; transform:translate(-50%,-50%) scale(1.1)!important; }
+        .vjs-big-play-button .vjs-icon-placeholder::before { font-size:28px!important; line-height:64px!important; }
+
+        /* Accent colours */
+        .vjs-play-progress, .vjs-volume-level { background:var(--accent)!important; }
+        .vjs-play-progress::before { color:var(--accent)!important; }
+        .vjs-load-progress div { background:rgba(220,22,55,.25)!important; }
+
+        /* Control bar */
+        .vjs-control-bar {
+            background:linear-gradient(transparent,rgba(0,0,0,.88))!important;
+            height:48px!important; padding:0 8px!important;
+        }
+        .vjs-button>.vjs-icon-placeholder::before { line-height:48px!important; font-size:18px!important; }
+
+        /* Seek bar floats above control bar */
+        .vjs-progress-control {
+            position:absolute!important; top:-12px!important;
+            left:0; right:0; width:100%!important; height:4px!important;
+            transition:height .15s,top .15s!important;
+        }
+        .vjs-progress-control:hover { height:8px!important; top:-16px!important; }
+        .vjs-slider { border-radius:4px!important; background:rgba(255,255,255,.2)!important; }
+
+        /* Menus (audio/sub/quality) */
+        .vjs-menu-button-popup .vjs-menu {
+            background:var(--surface2)!important;
+            border:1px solid var(--border)!important;
+            border-radius:8px!important;
+        }
+        .vjs-menu li { color:var(--text)!important; font-family:'Inter',sans-serif!important; font-size:13px!important; }
+        .vjs-menu li:hover, .vjs-menu li.vjs-selected { background:var(--accent)!important; color:#fff!important; border-radius:4px!important; }
+        .vjs-menu li.vjs-menu-title { color:var(--muted)!important; font-size:11px!important; letter-spacing:.6px!important; }
+
+        /* Subtitle/caption display */
+        .vjs-text-track-display { bottom:52px!important; }
+        .vjs-text-track-cue > * {
+            background:rgba(0,0,0,.78)!important;
+            color:#fff!important; border-radius:4px!important;
+            padding:2px 8px!important; font-size:1.1em!important;
+            font-family:'Inter',sans-serif!important;
+        }
+
+        /* ── FILE INFO ── */
+        .file-info {
+            padding:18px 20px; border-top:1px solid var(--border);
+            display:flex; align-items:flex-start; justify-content:space-between;
+            flex-wrap:wrap; gap:12px;
+        }
+        .file-meta h2 { font-size:15px; font-weight:600; margin-bottom:4px; word-break:break-all; }
+        .badge {
+            display:inline-flex; align-items:center; gap:5px;
+            font-size:12px; color:var(--muted);
+            background:var(--surface2); border:1px solid var(--border);
+            border-radius:6px; padding:3px 10px;
+        }
+        .action-btns { display:flex; flex-wrap:wrap; gap:8px; }
+
+        /* ── BUTTONS ── */
+        .btn {
+            display:inline-flex; align-items:center; gap:7px;
+            padding:9px 16px; border-radius:8px; font-size:13px; font-weight:500;
+            cursor:pointer; text-decoration:none; border:none;
+            transition:all .15s; font-family:'Inter',sans-serif;
+        }
+        .btn-primary { background:var(--accent); color:#fff; }
+        .btn-primary:hover { background:#b8112b; box-shadow:0 0 16px var(--glow); }
+        .btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+        .btn-secondary:hover { border-color:rgba(255,255,255,.2); background:#222228; }
+        .btn svg { width:15px; height:15px; flex-shrink:0; }
+
+        /* ── SECTIONS ── */
+        .section-card {
+            margin-top:20px; background:var(--surface); border-radius:var(--radius);
+            border:1px solid var(--border); padding:18px 20px;
+        }
+        .section-title {
+            font-size:11px; font-weight:600; letter-spacing:.8px;
+            text-transform:uppercase; color:var(--muted); margin-bottom:14px;
+        }
+
+        /* ── TRACK GRID ── */
+        .track-grid { display:flex; flex-wrap:wrap; gap:8px; }
+        .track-btn {
+            display:inline-flex; align-items:center; gap:6px;
+            padding:7px 13px; border-radius:7px; font-size:12px; font-weight:500;
+            cursor:pointer; border:1px solid var(--border);
+            background:var(--surface2); color:var(--text);
+            transition:all .15s; font-family:'Inter',sans-serif;
+        }
+        .track-btn:hover { border-color:var(--accent); color:var(--accent); }
+        .track-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); box-shadow:0 0 10px var(--glow); }
+        .track-btn .lang-flag { font-size:14px; }
+
+        /* ── QUALITY BADGE ── */
+        .quality-group { display:flex; flex-wrap:wrap; gap:8px; }
+        .quality-btn {
+            padding:6px 14px; border-radius:6px; font-size:12px; font-weight:600;
+            cursor:pointer; border:1px solid var(--border);
+            background:var(--surface2); color:var(--muted);
+            transition:all .15s; font-family:'Inter',sans-serif;
+        }
+        .quality-btn:hover { border-color:rgba(255,255,255,.3); color:var(--text); }
+        .quality-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+        .quality-btn.auto { border-style:dashed; }
+
+        /* ── EMBED ── */
+        .embed-code-box { display:flex; align-items:center; gap:8px; margin-top:10px; }
+        .embed-code-box input {
+            flex:1; background:var(--bg); border:1px solid var(--border);
+            border-radius:8px; padding:10px 12px; color:var(--muted);
+            font-size:12px; font-family:monospace; outline:none;
+        }
+        .embed-code-box input:focus { border-color:var(--accent); color:var(--text); }
+
+        /* ── EXT PLAYERS ── */
+        .ext-grid { display:flex; flex-wrap:wrap; gap:8px; }
+
+        /* ── TOAST ── */
+        #toast {
+            position:fixed; bottom:24px; left:50%;
+            transform:translateX(-50%) translateY(80px);
+            background:#27272e; color:var(--text);
+            padding:10px 20px; border-radius:8px; font-size:13px; font-weight:500;
+            border:1px solid var(--border); box-shadow:0 8px 24px rgba(0,0,0,.4);
+            transition:transform .3s cubic-bezier(.34,1.56,.64,1); z-index:999;
+        }
+        #toast.show { transform:translateX(-50%) translateY(0); }
+
+        /* ── STATUS BAR ── */
+        #statusBar {
+            font-size:11px; color:var(--muted); margin-top:10px;
+            display:flex; gap:16px; flex-wrap:wrap; align-items:center;
+        }
+        #statusBar span { display:inline-flex; align-items:center; gap:4px; }
+        .dot-live { width:6px; height:6px; border-radius:50%; background:#22c55e; animation:pulse 1.5s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+        @media (max-width:600px) {
+            main { padding:12px 8px 40px; }
+            header { padding:0 14px; }
+            .file-info { flex-direction:column; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+    <a class="logo" href="#">
+        <span class="logo-dot"></span>
+        FILE STREAM
+    </a>
+    <div style="display:flex; gap:8px;">
+        <a class="btn btn-primary" href="{{ file_url }}" download>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+            </svg>
+            Download
+        </a>
+    </div>
+</header>
+
+<!-- MAIN -->
+<main>
+
+    <!-- Player -->
+    <div class="player-card">
+        <div class="video-container">
+            <video id="fsPlayer"
+                class="video-js vjs-default-skin vjs-big-play-centered"
+                controls preload="metadata" playsinline>
+            </video>
+        </div>
+
+        <!-- File Info -->
+        <div class="file-info">
+            <div class="file-meta">
+                <h2>{{ file_name }}</h2>
+                <span class="badge">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+                    </svg>
+                    {{ file_size }}
+                </span>
+            </div>
+            <div class="action-btns">
+                <button class="btn btn-secondary" onclick="copyLink()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2"/>
+                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                    </svg>
+                    Copy Link
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="statusBar">
+        <span><span class="dot-live" id="statusDot" style="background:#888"></span><span id="statusText">Loading...</span></span>
+        <span id="qualityStatus"></span>
+        <span id="audioStatus"></span>
+        <span id="subStatus"></span>
+    </div>
+
+    <!-- ── AUDIO TRACKS ── -->
+    <div class="section-card" id="audioSection" style="display:none;">
+        <p class="section-title">🎵 Audio Track</p>
+        <div class="track-grid" id="audioGrid"></div>
+    </div>
+
+    <!-- ── SUBTITLES ── -->
+    <div class="section-card" id="subSection" style="display:none;">
+        <p class="section-title">💬 Subtitles / Captions</p>
+        <div class="track-grid" id="subGrid"></div>
+    </div>
+
+    <!-- ── QUALITY ── -->
+    <div class="section-card" id="qualitySection" style="display:none;">
+        <p class="section-title">📺 Video Quality</p>
+        <div class="quality-group" id="qualityGrid"></div>
+    </div>
+
+    <!-- ── EXTERNAL PLAYERS ── -->
+    <div class="section-card">
+        <p class="section-title">▶ Open in external player</p>
+        <div class="ext-grid">
+            <a class="btn btn-secondary" href="vlc://{{ file_url }}">
+                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+                VLC Player
+            </a>
+            <a class="btn btn-secondary" href="intent:{{ file_url }}#Intent;package=com.mxtech.videoplayer.ad;end">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                MX Player
+            </a>
+            <a class="btn btn-secondary" href="nplayer-{{ file_url }}">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                nPlayer
+            </a>
+        </div>
+    </div>
+
+    <!-- ── EMBED ── -->
+    <div class="section-card">
+        <p class="section-title">🔗 Embed this player</p>
+        <p style="font-size:13px; color:var(--muted); margin-bottom:4px;">Use this iframe code to embed the player on any website.</p>
+        <div class="embed-code-box">
+            <input type="text" id="embedInput" readonly
+                value='<iframe src="{{ embed_url }}" width="100%" height="450" frameborder="0" allowfullscreen scrolling="no" allow="autoplay; fullscreen; encrypted-media"></iframe>' />
+            <button class="btn btn-secondary" onclick="copyEmbed()">Copy</button>
+        </div>
+    </div>
+
+</main>
+
+<!-- Toast -->
+<div id="toast">✓ Copied!</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────
+// CONFIG
+// ─────────────────────────────────────────────────────────────────
+const FILE_URL  = "{{ file_url }}";
+const HLS_URL   = "{{ hls_url }}";
+const EMBED_URL = "{{ embed_url }}";
+
+// ─────────────────────────────────────────────────────────────────
+// INIT VIDEO.JS
+// ─────────────────────────────────────────────────────────────────
+const player = videojs('fsPlayer', {
+    fluid: true,
+    responsive: true,
+    playbackRates: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
+    html5: {
+        vhs: {
+            overrideNative: !videojs.browser.IS_SAFARI,
+            enableLowInitialPlaylist: false,
+            smoothQualityChange: true,
+            limitRenditionByPlayerDimensions: false,
+        },
+        nativeAudioTracks: false,
+        nativeVideoTracks: false,
+        nativeTextTracks: false,
+    },
+    controlBar: {
+        children: [
+            'playToggle',
+            'volumePanel',
+            'currentTimeDisplay',
+            'timeDivider',
+            'durationDisplay',
+            'progressControl',
+            'playbackRateMenuButton',
+            'audioTrackButton',      // built-in multi-audio switcher
+            'subsCapsButton',        // built-in subtitle/CC button
+            'fullscreenToggle',
+        ]
+    },
+    userActions: { hotkeys: true }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// SOURCE LOADING
+// ─────────────────────────────────────────────────────────────────
+player.ready(function () {
+    setStatus('loading');
+
+    if (HLS_URL && HLS_URL.trim() !== "") {
+        // VHS (Video.js built-in HLS) handles it natively
+        player.src({ src: HLS_URL, type: 'application/x-mpegURL' });
+    } else {
+        player.src({ src: FILE_URL, type: 'video/mp4' });
+    }
+
+    player.on('playing', () => setStatus('playing'));
+    player.on('pause',   () => setStatus('paused'));
+    player.on('waiting', () => setStatus('buffering'));
+    player.on('error',   () => setStatus('error'));
+
+    // ── Audio Tracks ──
+    player.on('loadedmetadata', buildAudioUI);
+    // VHS fires 'audioTracksChange' when tracks become available
+    player.audioTracks().on('addtrack', buildAudioUI);
+    player.audioTracks().on('change',   syncAudioUI);
+
+    // ── Text Tracks (subtitles / captions) ──
+    player.on('loadedmetadata', buildSubUI);
+    player.textTracks().on('addtrack',  buildSubUI);
+    player.textTracks().on('change',    syncSubUI);
+
+    // ── Quality Levels ──
+    const ql = player.qualityLevels();
+    ql.on('addqualitylevel', buildQualityUI);
+    ql.on('change', syncQualityUI);
+});
+
+// ─────────────────────────────────────────────────────────────────
+// STATUS BAR
+// ─────────────────────────────────────────────────────────────────
+function setStatus(state) {
+    const dot  = document.getElementById('statusDot');
+    const text = document.getElementById('statusText');
+    const map  = {
+        loading:   ['#888',    'Loading...'],
+        playing:   ['#22c55e', 'Playing'],
+        paused:    ['#f59e0b', 'Paused'],
+        buffering: ['#3b82f6', 'Buffering...'],
+        error:     ['#ef4444', 'Playback error'],
+    };
+    const [color, label] = map[state] || ['#888', state];
+    dot.style.background  = color;
+    text.textContent      = label;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// AUDIO TRACK UI
+// ─────────────────────────────────────────────────────────────────
+const LANG_FLAGS = { jpn:'🇯🇵', eng:'🇺🇸', hin:'🇮🇳', ben:'🇧🇩', ara:'🇸🇦', fra:'🇫🇷', deu:'🇩🇪', zho:'🇨🇳', kor:'🇰🇷', spa:'🇪🇸', por:'🇧🇷', rus:'🇷🇺', ita:'🇮🇹', tur:'🇹🇷', und:'🎵' };
+const LANG_NAMES = { jpn:'Japanese', eng:'English', hin:'Hindi', ben:'Bengali', ara:'Arabic', fra:'French', deu:'German', zho:'Chinese', kor:'Korean', spa:'Spanish', por:'Portuguese', rus:'Russian', ita:'Italian', tur:'Turkish', und:'Default' };
+
+let _audioBuilt = false;
+function buildAudioUI() {
+    const tracks = player.audioTracks();
+    if (!tracks || tracks.length <= 1) return; // only show if multiple tracks exist
+    if (_audioBuilt && tracks.length === document.querySelectorAll('#audioGrid .track-btn').length) return;
+    _audioBuilt = true;
+
+    const grid = document.getElementById('audioGrid');
+    grid.innerHTML = '';
+    document.getElementById('audioSection').style.display = '';
+
+    for (let i = 0; i < tracks.length; i++) {
+        const t = tracks[i];
+        const lang  = (t.language || 'und').toLowerCase().substring(0, 3);
+        const flag  = LANG_FLAGS[lang] || '🎵';
+        const label = t.label || LANG_NAMES[lang] || t.language || `Track ${i+1}`;
+
+        const btn = document.createElement('button');
+        btn.className = 'track-btn' + (t.enabled ? ' active' : '');
+        btn.dataset.idx = i;
+        btn.innerHTML = `<span class="lang-flag">${flag}</span>${label}`;
+        btn.onclick = () => selectAudioTrack(i);
+        grid.appendChild(btn);
+    }
+    syncAudioUI();
+}
+
+function selectAudioTrack(idx) {
+    const tracks = player.audioTracks();
+    for (let i = 0; i < tracks.length; i++) {
+        tracks[i].enabled = (i === idx);
+    }
+}
+
+function syncAudioUI() {
+    const tracks  = player.audioTracks();
+    const buttons = document.querySelectorAll('#audioGrid .track-btn');
+    let activeLabel = '';
+    buttons.forEach(btn => {
+        const i = parseInt(btn.dataset.idx);
+        const active = tracks[i] && tracks[i].enabled;
+        btn.classList.toggle('active', active);
+        if (active) activeLabel = btn.textContent.trim();
+    });
+    document.getElementById('audioStatus').textContent = activeLabel ? `🎵 ${activeLabel}` : '';
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SUBTITLE / TEXT TRACK UI
+// ─────────────────────────────────────────────────────────────────
+let _subBuilt = false;
+function buildSubUI() {
+    const tracks = player.textTracks();
+    // Filter only subtitle/caption tracks (not metadata)
+    const subTracks = [];
+    for (let i = 0; i < tracks.length; i++) {
+        if (['subtitles', 'captions'].includes(tracks[i].kind)) {
+            subTracks.push({ track: tracks[i], idx: i });
+        }
+    }
+    if (subTracks.length === 0) return;
+    if (_subBuilt && subTracks.length === document.querySelectorAll('#subGrid .track-btn').length) return;
+    _subBuilt = true;
+
+    const grid = document.getElementById('subGrid');
+    grid.innerHTML = '';
+    document.getElementById('subSection').style.display = '';
+
+    // "Off" button
+    const offBtn = document.createElement('button');
+    offBtn.className = 'track-btn active';
+    offBtn.dataset.idx = -1;
+    offBtn.innerHTML = '🚫 Off';
+    offBtn.onclick = () => selectSubTrack(-1, tracks);
+    grid.appendChild(offBtn);
+
+    subTracks.forEach(({ track, idx }) => {
+        const lang  = (track.language || 'und').toLowerCase().substring(0, 3);
+        const flag  = LANG_FLAGS[lang] || '💬';
+        const label = track.label || LANG_NAMES[lang] || track.language || `Sub ${idx+1}`;
+
+        const btn = document.createElement('button');
+        btn.className = 'track-btn';
+        btn.dataset.idx = idx;
+        btn.innerHTML = `<span class="lang-flag">${flag}</span>${label}`;
+        btn.onclick = () => selectSubTrack(idx, tracks);
+        grid.appendChild(btn);
+    });
+    syncSubUI();
+}
+
+function selectSubTrack(selectedIdx, tracks) {
+    for (let i = 0; i < tracks.length; i++) {
+        if (['subtitles','captions'].includes(tracks[i].kind)) {
+            tracks[i].mode = (i === selectedIdx) ? 'showing' : 'hidden';
+        }
+    }
+}
+
+function syncSubUI() {
+    const tracks  = player.textTracks();
+    const buttons = document.querySelectorAll('#subGrid .track-btn');
+    let activeLabel = '';
+    buttons.forEach(btn => {
+        const i = parseInt(btn.dataset.idx);
+        if (i === -1) {
+            // "Off" button is active if no subtitle is showing
+            let anyShowing = false;
+            for (let j = 0; j < tracks.length; j++) {
+                if (['subtitles','captions'].includes(tracks[j].kind) && tracks[j].mode === 'showing') {
+                    anyShowing = true; break;
+                }
+            }
+            btn.classList.toggle('active', !anyShowing);
+        } else {
+            const active = tracks[i] && tracks[i].mode === 'showing';
+            btn.classList.toggle('active', active);
+            if (active) activeLabel = btn.textContent.trim();
+        }
+    });
+    document.getElementById('subStatus').textContent = activeLabel ? `💬 ${activeLabel}` : '';
+}
+
+// ─────────────────────────────────────────────────────────────────
+// QUALITY LEVELS UI
+// ─────────────────────────────────────────────────────────────────
+const QUALITY_LABELS = { 2160: '4K', 1440: '2K', 1080: '1080p', 720: '720p', 480: '480p', 360: '360p', 240: '240p', 144: '144p' };
+let _qualityBuilt = false;
+let _autoMode = true;
+
+function buildQualityUI() {
+    const ql = player.qualityLevels();
+    if (ql.length <= 1) return;
+
+    const grid = document.getElementById('qualityGrid');
+    grid.innerHTML = '';
+    document.getElementById('qualitySection').style.display = '';
+    _qualityBuilt = true;
+
+    // Auto button
+    const autoBtn = document.createElement('button');
+    autoBtn.className = 'quality-btn auto active';
+    autoBtn.id = 'qbtn-auto';
+    autoBtn.textContent = 'Auto';
+    autoBtn.onclick = () => selectQuality(-1);
+    grid.appendChild(autoBtn);
+
+    // Collect unique heights
+    const seen = new Set();
+    for (let i = ql.length - 1; i >= 0; i--) {
+        const h = ql[i].height;
+        if (seen.has(h)) continue;
+        seen.add(h);
+
+        const btn = document.createElement('button');
+        btn.className = 'quality-btn';
+        btn.dataset.height = h;
+        btn.dataset.idx = i;
+        btn.textContent = QUALITY_LABELS[h] || (h + 'p');
+        btn.onclick = () => selectQuality(i, h);
+        grid.appendChild(btn);
+    }
+    syncQualityUI();
+}
+
+function selectQuality(idx, height) {
+    const ql = player.qualityLevels();
+    _autoMode = (idx === -1);
+
+    for (let i = 0; i < ql.length; i++) {
+        ql[i].enabled = _autoMode ? true : (ql[i].height === height);
+    }
+    document.querySelectorAll('#qualityGrid .quality-btn').forEach(b => {
+        b.classList.toggle('active', _autoMode ? b.id === 'qbtn-auto' : parseInt(b.dataset.height) === height);
+    });
+}
+
+function syncQualityUI() {
+    const ql = player.qualityLevels();
+    const activeIdx = ql.selectedIndex;
+    if (activeIdx < 0) return;
+    const h = ql[activeIdx].height;
+    const label = QUALITY_LABELS[h] || (h + 'p');
+    document.getElementById('qualityStatus').textContent = `📺 ${_autoMode ? 'Auto (' + label + ')' : label}`;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// KEYBOARD SHORTCUTS
+// ─────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', function (e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    switch (e.key) {
+        case ' ': case 'k':
+            e.preventDefault();
+            player.paused() ? player.play() : player.pause();
+            break;
+        case 'ArrowRight':
+            e.preventDefault();
+            player.currentTime(Math.min(player.currentTime() + 10, player.duration()));
+            showSkipToast('+10s');
+            break;
+        case 'ArrowLeft':
+            e.preventDefault();
+            player.currentTime(Math.max(player.currentTime() - 10, 0));
+            showSkipToast('-10s');
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            player.volume(Math.min(player.volume() + 0.1, 1));
+            break;
+        case 'ArrowDown':
+            e.preventDefault();
+            player.volume(Math.max(player.volume() - 0.1, 0));
+            break;
+        case 'f': case 'F':
+            player.isFullscreen() ? player.exitFullscreen() : player.requestFullscreen();
+            break;
+        case 'm': case 'M':
+            player.muted(!player.muted());
+            break;
+        case 'c': case 'C':
+            // cycle subtitle tracks
+            cycleSubtitle();
+            break;
+        case 'a': case 'A':
+            // cycle audio tracks
+            cycleAudio();
+            break;
+    }
+});
+
+function cycleSubtitle() {
+    const tracks = player.textTracks();
+    const subs = [];
+    for (let i = 0; i < tracks.length; i++) {
+        if (['subtitles','captions'].includes(tracks[i].kind)) subs.push(i);
+    }
+    if (subs.length === 0) return;
+    const currentIdx = subs.findIndex(i => tracks[i].mode === 'showing');
+    const nextIdx    = currentIdx === subs.length - 1 ? -1 : subs[currentIdx + 1] ?? subs[0];
+    selectSubTrack(nextIdx, tracks);
+    showToast(nextIdx === -1 ? 'Subtitles: Off' : '💬 ' + (tracks[nextIdx].label || tracks[nextIdx].language));
+}
+
+function cycleAudio() {
+    const tracks = player.audioTracks();
+    if (tracks.length <= 1) return;
+    const currentIdx = Array.from({ length: tracks.length }, (_, i) => i).find(i => tracks[i].enabled) ?? 0;
+    const nextIdx    = (currentIdx + 1) % tracks.length;
+    selectAudioTrack(nextIdx);
+    showToast('🎵 ' + (tracks[nextIdx].label || tracks[nextIdx].language || `Track ${nextIdx + 1}`));
+}
+
+// ─────────────────────────────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────────────────────────────
+let _toastTimer;
+function showToast(msg) {
+    clearTimeout(_toastTimer);
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    _toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
+}
+function showSkipToast(msg) { showToast(msg); }
+
+function copyLink() {
+    navigator.clipboard.writeText(FILE_URL).then(() => showToast('✓ Stream link copied!'));
+}
+function copyEmbed() {
+    const val = document.getElementById('embedInput').value;
+    navigator.clipboard.writeText(val).then(() => showToast('✓ Embed code copied!'));
+}
+</script>
+</body>
+</html>
